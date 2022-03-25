@@ -3,6 +3,7 @@ import os
 import numpy as np
 import torch
 from torch.autograd import Variable
+from torch.cuda import amp
 from collections import OrderedDict
 from subprocess import call
 import fractions
@@ -41,7 +42,6 @@ print('#training images = %d' % dataset_size)
 model = create_model(opt)
 visualizer = Visualizer(opt)
 if opt.fp16:    
-    from torch.cuda import amp
     # model, [optimizer_G, optimizer_D] = amp.initialize(model, [model.optimizer_G, model.optimizer_D], opt_level='O1') 
     [optimizer_G, optimizer_D] = [model.optimizer_G, model.optimizer_D]            
     model = torch.nn.DataParallel(model, device_ids=opt.gpu_ids)
@@ -69,7 +69,7 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
         save_fake = total_steps % opt.display_freq == display_delta
 
         ############## Forward Pass ######################
-        with amp.autocast():
+        with amp.autocast(enabled=opt.fp16):
             losses, generated = model(Variable(data['label']), Variable(data['inst']), 
                 Variable(data['image']), Variable(data['feat']), infer=save_fake)
 
