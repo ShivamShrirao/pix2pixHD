@@ -109,18 +109,28 @@ class GANLoss(nn.Module):
             target_tensor = self.get_target_tensor(input[-1], target_is_real)
             return self.loss(input[-1], target_tensor)
 
+def gram_matrix(x):
+    n, c, h, w = x.size()
+    x = x.view(n, c, h * w)
+    G = torch.bmm(x, x.transpose(-1,-2))
+    G = G.div_(c * h * w)
+    return G.clamp_(max=5e4)
+
 class VGGLoss(nn.Module):
     def __init__(self, gpu_ids):
         super(VGGLoss, self).__init__()        
         self.vgg = Vgg19().cuda()
         self.criterion = nn.L1Loss()
-        self.weights = [1.0/32, 1.0/16, 1.0/8, 1.0/4, 1.0]        
+        self.weights = [1.0/32, 1.0/16, 1.0/8, 1.0/4, 1.0]      
+        self.content_weight = 5
+        self.style_weight  = 1
 
     def forward(self, x, y):              
         x_vgg, y_vgg = self.vgg(x), self.vgg(y)
         loss = 0
         for i in range(len(x_vgg)):
-            loss += self.weights[i] * self.criterion(x_vgg[i], y_vgg[i].detach())        
+            loss += self.weights[i] * self.criterion(x_vgg[i], y_vgg[i].detach()) * self.content_weight
+            loss += self.weights[i] * self.criterion(gram_matrix(x_vgg[i]), gram_matrix(y_vgg[i])) * self.style_weight
         return loss
 
 ##############################################################################
@@ -176,7 +186,7 @@ class LocalEnhancer(nn.Module):
         for n_local_enhancers in range(1, self.n_local_enhancers+1):
             model_downsample = getattr(self, 'model'+str(n_local_enhancers)+'_1')
             model_upsample = getattr(self, 'model'+str(n_local_enhancers)+'_2')            
-            input_i = input_downsampled[self.n_local_enhancers-n_local_enhancers]            
+            input_i = input_downsampled[self.n_local_enhancers-n_local_enhancers]          
             output_prev = model_upsample(model_downsample(input_i) + output_prev)
         return output_prev
 
